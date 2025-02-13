@@ -95,12 +95,13 @@ where * will be *rdock* and *vina*.
 The training set, pose prediction set, HIV-1 TAR/PreQ1 RS ensemble and compound library can be downloaded from the **Releases** or through the following commands:
 ```
 mkdir -p ${RLDOCKSCORE_HOME}/data/
-wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/checksum.txt -O ${RLDOCKSCORE_HOME}/data/checksum.txt
-wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/training-set.tar.gz -O ${RLDOCKSCORE_HOME}/data/training-set.tar.gz
-wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/pose-prediciton-set.tar.gz -O ${RLDOCKSCORE_HOME}/data/pose-prediciton-set.tar.gz
-wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/HIV-1-TAR.tar.gz -O ${RLDOCKSCORE_HOME}/data/HIV-1-TAR.tar.gz
-wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/PreQ1-RS.tar.gz -O ${RLDOCKSCORE_HOME}/data/PreQ1-RS.tar.gz
-wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/rldock-score-v2-predicted-scores.tar.gz -O ${RLDOCKSCORE_HOME}/data/rldock-score-v2-predicted-scores.tar.gz
+```
+
+```
+for name in "checksum.txt" "training-set.tar.gz" "pose-prediciton-set.tar.gz" "HIV-1-TAR.tar.gz" "PreQ1-RS.tar.gz" "rldockscore-predicted-scores.tar.gz"
+do
+  wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/${name} -O ${RLDOCKSCORE_HOME}/data/${name}
+done
 ```
 Check the integrity of the files:
 ```
