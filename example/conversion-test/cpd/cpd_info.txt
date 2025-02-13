@@ -1,0 +1,9 @@
+#cpd
+lig_absFC:  0.00
+lig_sumFC:  0.00
+lig_sumPC:  -0.00
+lig_openeye_torsion:  3
+lig_vina_torsion:  4
+lig_H_donor_idx:  22 23
+lig_H_acceptor_idx:  21 22 23
+lig_aromatic_idx:  0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+flag=true
+for name in "2CKY-A-1084-TPP"; do
+  echo "---------------------------"
+  echo "Running ${name}..."
+  echo "---------------------------"
+  # ${RLDOCKSCORE_HOME}/bin/openeye_get_info -r ${name}/rec.mol2 -c ${name}/cpd_charge.mol2 -o ${name}/info.txt
+  ${RLDOCKSCORE_HOME}/bin/check_atom_order -c ${name}/cpd_charge.mol2 --c_mol2_type sybyl -p ${name}/pose/pose.mol2 --p_mol2_type sybyl
+  ${RLDOCKSCORE_HOME}/bin/rldockscore -r ${name}/rec.mol2 -l ${name}/cpd_charge.mol2 -p ${name}/pose/pose.mol2 -i ${name}/info.txt -s binding_mode &>${name}/score/binding_mode_score.dat
+  ${RLDOCKSCORE_HOME}/bin/rldockscore -r ${name}/rec.mol2 -l ${name}/cpd_charge.mol2 -p ${name}/pose/pose.mol2 -i ${name}/info.txt -s virtual_screen &>${name}/score/virtual_screen_score.dat
+
+  for score_mode in "binding_mode" "virtual_screen"; do
+    echo "Checking rldockscore ${score_mode} score..."
+    # compare the rldockscore predicted scores with reference
+    diff ${name}/score/${score_mode}_score.dat ${name}/score/reference.${score_mode}_score.dat &>${name}/score/${score_mode}_score.dat.diff
+    if [ ! -s "${name}/score/${score_mode}_score.dat.diff" ]; then
+      echo "PASSED: ${name} example."
+      rm -f ${name}/score/${score_mode}_score.dat.diff
+    else
+      echo "POSSIBLE FAILURE: ${name} example. Please check ${name}/score/${score_mode}_score.dat.diff"
+      flag=false
+    fi
+  done
+done
+
+if [ "${flag}" = false ]; then
+  echo "FAILED!"
+else
+  echo "SUCCEEDED!"
+fi

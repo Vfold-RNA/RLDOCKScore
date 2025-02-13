@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+flag=true
+c_dir="conversion-test"
+#echo "Preparing info file..."
+# ${RLDOCKSCORE_HOME}/bin/openeye_get_info -r ${c_dir}/rec/rec.mol2 -c ${c_dir}/cpd/cpd.mol2 -o ${c_dir}/info/info.txt
+
+for name in "rdock" "vina"; do
+  echo "----------------------------------------------"
+  echo "Running conversion test for ${name} poses..."
+  echo "----------------------------------------------"
+
+  rm -f ${c_dir}/pose/${name}_pose.mol2
+
+  if [ ${name} == "rdock" ]; then
+    ${RLDOCKSCORE_HOME}/bin/convert_rdock_pose -r ${c_dir}/cpd/cpd.mol2 -p ${c_dir}/pose/rdock_pose.sd -o ${c_dir}/pose/rdock_pose.mol2
+  else
+    ${RLDOCKSCORE_HOME}/bin/convert_vina_pose -r ${c_dir}/cpd/cpd.mol2 -p ${c_dir}/pose/vina_pose.pdbqt -o ${c_dir}/pose/vina_pose.mol2
+  fi
+  ${RLDOCKSCORE_HOME}/bin/check_atom_order -c ${c_dir}/cpd/cpd.mol2 --c_mol2_type sybyl -p ${c_dir}/pose/${name}_pose.mol2 --p_mol2_type sybyl
+  ${RLDOCKSCORE_HOME}/bin/rldockscore -r ${c_dir}/rec/rec.mol2 -l ${c_dir}/cpd/cpd.mol2 -p ${c_dir}/pose/${name}_pose.mol2 -i ${c_dir}/info/info.txt -s binding_mode &>${c_dir}/score/${name}_pose_binding_mode_score.dat
+  ${RLDOCKSCORE_HOME}/bin/rldockscore -r ${c_dir}/rec/rec.mol2 -l ${c_dir}/cpd/cpd.mol2 -p ${c_dir}/pose/${name}_pose.mol2 -i ${c_dir}/info/info.txt -s virtual_screen &>${c_dir}/score/${name}_pose_virtual_screen_score.dat
+
+  # compare the rldockscore predicted scores with reference
+  for score_mode in "binding_mode" "virtual_screen"; do
+    echo "Checking rldockscore ${score_mode} score..."
+    diff ${c_dir}/score/${name}_pose_${score_mode}_score.dat ${c_dir}/score/reference.${name}_pose_${score_mode}_score.dat &>${c_dir}/score/${name}_pose_${score_mode}_score.dat.diff
+    if [ ! -s "${c_dir}/score/${name}_pose_${score_mode}_score.dat.diff" ]; then
+      echo "PASSED: ${name} conversion test."
+      rm -f ${c_dir}/score/${name}_pose_${score_mode}_score.dat.diff
+    else
+      echo "POSSIBLE FAILURE: ${name} conversion test. Please check ${c_dir}/score/${name}_pose_${score_mode}_score.dat.diff"
+      flag=false
+    fi
+  done
+
+done
+
+if [ "${flag}" = false ]; then
+  echo "FAILED!"
+else
+  echo "SUCCEEDED!"
+fi

@@ -1,0 +1,14 @@
+.vscode
+
+/dev/
+/data/
+/bin/
+
+/example/2CKY-A-1084-TPP/score/binding_mode_score.dat
+/example/2CKY-A-1084-TPP/score/virtual_screen_score.dat
+/example/conversion-test/pose/rdock_pose.mol2
+/example/conversion-test/pose/vina_pose.mol2
+/example/conversion-test/score/rdock_pose_binding_mode_score.dat
+/example/conversion-test/score/vina_pose_binding_mode_score.dat
+/example/conversion-test/score/rdock_pose_virtual_screen_score.dat
+/example/conversion-test/score/vina_pose_virtual_screen_score.dat

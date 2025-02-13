@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+import os
+import sys
+import shutil
+import numpy as np
+import argparse
+
+from openeye import oechem
+from openeye import oeomega
+from openeye import oequacpac
+from openeye import oemolprop
+from openeye import oedepict
+
+### compound part ###
+
+# def draw_2d_png(in_path, save_path):
+#     ifs = oechem.oemolistream()
+#     if not ifs.open(in_path):
+#         oechem.OEThrow.Fatal("Unable to open %s for reading" % in_path)
+
+#     mol = oechem.OEGraphMol()
+#     if oechem.OEReadMolecule(ifs, mol):
+#         # oechem.OESuppressHydrogens(mol)
+#         oedepict.OEPrepareDepiction(mol)
+#         width, height = 1200, 1200
+#         opts = oedepict.OE2DMolDisplayOptions(width, height, oedepict.OEScale_AutoScale)
+#         disp = oedepict.OE2DMolDisplay(mol, opts)
+#         oedepict.OERenderMolecule(save_path, mol)
+#     else:
+#         print(f'Fatal: fail to read mol: {in_path}', flush=True)
+#         exit()
+
+def get_openeye_num_torsions(in_path):
+    ifs = oechem.oemolistream()
+    if not ifs.open(in_path):
+        oechem.OEThrow.Fatal("Unable to open %s for reading" % in_path)
+
+    mol = oechem.OEGraphMol()
+    if oechem.OEReadMolecule(ifs, mol):
+        # oechem.OESuppressHydrogens(mol)
+        return oemolprop.OEGetRotatableBondCount(mol)
+    else:
+        print(f'Fatal: fail to read mol: {in_path}', flush=True)
+        exit()
+
+# def check_and_return_charges(in_path):
+#     charge_check_ifs = oechem.oemolistream()
+#     if not charge_check_ifs.open(in_path):
+#         oechem.OEThrow.Fatal("Unable to open %s for charge checking" % in_path)
+#     for mol in charge_check_ifs.GetOEMols():
+#         absFCharge = 0
+#         sumFCharge = 0
+#         sumPCharge = 0.0
+#         for atm in mol.GetAtoms():
+#             sumFCharge += atm.GetFormalCharge()
+#             absFCharge += abs(atm.GetFormalCharge())
+#             sumPCharge += atm.GetPartialCharge()
+#         print("{}: {} formal charges give total charge {}; sum of partial charges {:5.4f}".format(mol.GetTitle(), absFCharge, sumFCharge, sumPCharge), flush=True)
+#     return absFCharge,sumFCharge,sumPCharge
+
+def get_lig_aromatic_atom_idx_list(in_sdf):
+    aromatic_atom_idx_list = []
+    ifs = oechem.oemolistream()
+    if not ifs.open(in_sdf):
+        oechem.OEThrow.Fatal("Unable to open %s for reading" % in_sdf)
+
+    mol = oechem.OEGraphMol()
+    if oechem.OEReadMolecule(ifs, mol):
+        coords = mol.GetCoords()
+        for atom in mol.GetAtoms():
+            if atom.IsAromatic():
+                if oechem.OEGetAtomicSymbol(atom.GetAtomicNum()) != 'C' and oechem.OEGetAtomicSymbol(atom.GetAtomicNum()) != 'N':
+                    continue
+                # print(f'aromatic: {atom.GetIdx()}  {oechem.OEGetAtomicSymbol(atom.GetAtomicNum())}  {convert_coords_to_str(coords[atom.GetIdx()])}', flush=True)
+                aromatic_atom_idx_list.append(atom.GetIdx())
+    else:
+        print(f'Fatal: fail to read mol: {in_sdf}', flush=True)
+        exit()
+    return  aromatic_atom_idx_list
+
+def convert_coords_to_str(coords):
+    return f'{coords[0]:.3f}  {coords[1]:.3f}  {coords[2]:.3f}'
+
+# def parse_single_sdf(in_sdf):
+#     sdf_lines = None
+#     with open(in_sdf) as f:
+#         sdf_lines = f.readlines()
+#     flag = False
+#     charge_dict = {'7': -3, '6': -2, '5': -1, '0': 0, '3': 1, '2': 2, '1': 3, '4': None} # '4' is doublet radical
+#     mol_dict = {'atoms':[], 'sdf_types':[], 'coords':[], 'charges':[]}
+#     num_of_atom = 0
+#     num_of_bond = 0
+#     for line_index, line in enumerate(sdf_lines):
+#         l = line
+#         if line_index < 3:
+#             continue
+#         elif line_index == 3:
+#             num_of_atom, num_of_bond = int(l[0:3]), int(l[3:6])
+#             flag = True
+#         elif flag and (line_index - 3) <= num_of_atom:
+#             items = l.split()
+#             atom_name = items[3]
+#             x, y, z = float(items[0]), float(items[1]), float(items[2])
+#             sdf_type = atom_name
+#             charge = charge_dict[items[5]]
+#             mol_dict['atoms'].append(atom_name)
+#             mol_dict['sdf_types'].append(sdf_type)
+#             mol_dict['coords'].append(np.array((x, y, z)))
+#             mol_dict['charges'].append(charge)
+#     assert(len(mol_dict['atoms']) == num_of_atom)
+#     return mol_dict
+
+def get_lig_H_donor_idx_list(in_sdf):
+    donor_atom_idx_list = []
+    ifs = oechem.oemolistream()
+    if not ifs.open(in_sdf):
+        oechem.OEThrow.Fatal("Unable to open %s for reading" % in_sdf)
+
+    mol = oechem.OEGraphMol()
+    if oechem.OEReadMolecule(ifs, mol):
+        coords = mol.GetCoords()
+        oechem.OETriposAtomNames(mol)
+        # donorpred = oechem.OEMatchAtom("[$([#7,#8,#15,#16]);H]") # from openeye
+        donorpred = oechem.OEMatchAtom("[!H0;#7,#8,#9]") # from daylight: https://www.daylight.com/dayhtml_tutorials/languages/smarts/smarts_examples.html#H_BOND
+        for atom in mol.GetAtoms(donorpred):
+            # print(f'H-donor: {atom.GetIdx()}  {oechem.OEGetAtomicSymbol(atom.GetAtomicNum())}  {convert_coords_to_str(coords[atom.GetIdx()])}')
+            donor_atom_idx_list.append(atom.GetIdx())
+    else:
+        print(f'Fatal: fail to read mol: {in_sdf}')
+        exit()
+    return  donor_atom_idx_list
+
+def get_lig_H_acceptor_idx_list(in_sdf):
+    acceptor_atom_idx_list = []
+    ifs = oechem.oemolistream()
+    if not ifs.open(in_sdf):
+        oechem.OEThrow.Fatal("Unable to open %s for reading" % in_sdf)
+
+    mol = oechem.OEGraphMol()
+    if oechem.OEReadMolecule(ifs, mol):
+        coords = mol.GetCoords()
+        oechem.OETriposAtomNames(mol)
+        # acceptorpred = oechem.OEMatchAtom("[#8&!$(*~N~[OD1]),#7&H0;!$([D4]);!$([D3]-*=,:[$([#7,#8,#15,#16])])]")
+        acceptorpred = oechem.OEMatchAtom("[!$([#1]);!$([#6,F,Cl,Br,I,o,s,nX3,#7v5,#15v5,#16v4,#16v6,*+1,*+2,*+3])]") # from daylight
+        for atom in mol.GetAtoms(acceptorpred):
+            # print(f'H-acceptor: {atom.GetIdx()}  {oechem.OEGetAtomicSymbol(atom.GetAtomicNum())}  {convert_coords_to_str(coords[atom.GetIdx()])}')
+            acceptor_atom_idx_list.append(atom.GetIdx())
+    else:
+        print(f'Fatal: fail to read mol: {in_sdf}')
+        exit()
+    return  acceptor_atom_idx_list
+
+### receptor part ###
+
+def parse_single_mol2(in_mol2):
+    mol2_lines = None
+    with open(in_mol2) as f:
+        mol2_lines = f.readlines()
+    block_id = None
+    mol_dict = {'atoms':[], 'mol2_types':[], 'coords':[], 'charges':[], 'resns':[]}
+    molecule_lines = []
+    atom_lines = []
+    for line in mol2_lines:
+        if line[0:17] == '@<TRIPOS>MOLECULE':
+            block_id = '@<TRIPOS>MOLECULE'
+            continue
+        elif line[0:13] == '@<TRIPOS>ATOM':
+            block_id = '@<TRIPOS>ATOM'
+            continue
+        elif line[0:9] == '@<TRIPOS>':
+            block_id = 'Other'
+            continue
+
+        if block_id == '@<TRIPOS>MOLECULE':
+            molecule_lines.append(line)
+        if block_id == '@<TRIPOS>ATOM':
+            if line.strip() != '':
+                atom_lines.append(line)
+
+    assert(len(molecule_lines) == 6)
+    atom_num, bond_num = int(molecule_lines[1].split()[0]), int(molecule_lines[1].split()[1])
+    assert(len(atom_lines) == (atom_num))
+
+    for line in atom_lines:
+        items = line.strip().split()
+        atom_id = int(items[0])
+        atom_name = items[1]
+        x, y, z = float(items[2]), float(items[3]), float(items[4])
+        mol2_type = items[5]
+        resi = items[6]
+        resn = items[7]
+        charge = items[8]
+
+        mol_dict['atoms'].append(atom_name)
+        mol_dict['mol2_types'].append(mol2_type)
+        mol_dict['coords'].append(np.array((x, y, z)))
+        mol_dict['charges'].append(charge)
+        # mol_dict['resis'].append(resi)
+        mol_dict['resns'].append(resn)
+
+    assert(len(mol_dict['atoms']) == atom_num)
+    return mol_dict
+
+known_atom_set = set((
+    # for base A
+    "A-C1'", "A-C2'", "A-C3'", "A-C4'", "A-C5'", "A-O2'", "A-O3'", "A-O4'", "A-O5'", "A-OP1", "A-OP2", "A-O1P", "A-O2P", "A-P",
+    "A-C2",  "A-C4",  "A-C5",  "A-C6",  "A-C8",  "A-N1",  "A-N3",  "A-N6",  "A-N7",  "A-N9",
+    # for base U
+    "U-C1'", "U-C2'", "U-C3'", "U-C4'", "U-C5'", "U-O2'", "U-O3'", "U-O4'", "U-O5'", "U-OP1", "U-OP2", "U-O1P", "U-O2P", "U-P",
+    "U-C2",  "U-C4",  "U-C5",  "U-C6",  "U-N1",  "U-N3",  "U-O2",  "U-O4",
+    # for base G
+    "G-C1'", "G-C2'", "G-C3'", "G-C4'", "G-C5'", "G-O2'", "G-O3'", "G-O4'", "G-O5'", "G-OP1", "G-OP2", "G-O1P", "G-O2P", "G-P",
+    "G-C2",  "G-C4",  "G-C5",  "G-C6",  "G-C8",  "G-N1",  "G-N2",  "G-N3",  "G-N7",  "G-N9",  "G-O6",
+    # for base C
+    "C-C1'", "C-C2'", "C-C3'", "C-C4'", "C-C5'", "C-O2'", "C-O3'", "C-O4'", "C-O5'", "C-OP1", "C-OP2", "C-O1P", "C-O2P", "C-P",
+    "C-C2",  "C-C4",  "C-C5",  "C-C6",  "C-N1",  "C-N3",  "C-N4",  "C-O2",
+    # for base DA
+    "DA-C1'", "DA-C2'", "DA-C3'", "DA-C4'", "DA-C5'", "DA-O3'", "DA-O4'", "DA-O5'", "DA-OP1", "DA-OP2", "DA-O1P", "DA-O2P", "DA-P",
+    "DA-C2",  "DA-C4",  "DA-C5",  "DA-C6",  "DA-C8",  "DA-N1",  "DA-N3",  "DA-N6",  "DA-N7",  "DA-N9",
+    # for base DT
+    "DT-C1'", "DT-C2'", "DT-C3'", "DT-C4'", "DT-C5'", "DT-O3'", "DT-O4'", "DT-O5'", "DT-OP1", "DT-OP2", "DT-O1P", "DT-O2P", "DT-P",
+    "DT-C2",  "DT-C4",  "DT-C5",  "DT-C6",  "DT-C7",  "DT-N1",  "DT-N3",  "DT-O2",  "DT-O4",
+    # for base DG
+    "DG-C1'", "DG-C2'", "DG-C3'", "DG-C4'", "DG-C5'", "DG-O3'", "DG-O4'", "DG-O5'", "DG-OP1", "DG-OP2", "DG-O1P", "DG-O2P", "DG-P",
+    "DG-C2",  "DG-C4",  "DG-C5",  "DG-C6",  "DG-C8",  "DG-N1",  "DG-N2",  "DG-N3",  "DG-N7",  "DG-N9",  "DG-O6",
+    # for base DC
+    "DC-C1'", "DC-C2'", "DC-C3'", "DC-C4'", "DC-C5'", "DC-O3'", "DC-O4'", "DC-O5'", "DC-OP1", "DC-OP2", "DC-O1P", "DC-O2P", "DC-P",
+    "DC-C2",  "DC-C4",  "DC-C5",  "DC-C6",  "DC-N1",  "DC-N3",  "DC-N4",  "DC-O2",
+    # for base GTP
+    "GTP-C1'", "GTP-C2'", "GTP-C3'", "GTP-C4'", "GTP-C5'", "GTP-O2'", "GTP-O3'", "GTP-O4'", "GTP-O5'",
+    "GTP-C2",  "GTP-C4",  "GTP-C5",  "GTP-C6",  "GTP-C8",  "GTP-N1",  "GTP-N2",  "GTP-N3",  "GTP-N7",  "GTP-N9",  "GTP-O6",
+    "GTP-PA",  "GTP-PB",  "GTP-PG",
+    "GTP-O1A", "GTP-O2A", "GTP-O3A",
+    "GTP-O1B", "GTP-O2B", "GTP-O3B",
+    "GTP-O1G", "GTP-O2G", "GTP-O3G",
+    # for base GDP
+    "GDP-C1'", "GDP-C2'", "GDP-C3'", "GDP-C4'", "GDP-C5'", "GDP-O2'", "GDP-O3'", "GDP-O4'", "GDP-O5'",
+    "GDP-C2",  "GDP-C4",  "GDP-C5",  "GDP-C6",  "GDP-C8",  "GDP-N1",  "GDP-N2",  "GDP-N3",  "GDP-N7", "GDP-N9", "GDP-O6",
+    "GDP-PA",  "GDP-PB",
+    "GDP-O1A", "GDP-O2A", "GTP-O3A",
+    "GDP-O1B", "GDP-O2B", "GDP-O3B",
+    # for base CCC
+    "CCC-C1'", "CCC-C2'", "CCC-C3'", "CCC-C4'", "CCC-C5'", "CCC-O2'", "CCC-O3'", "CCC-O4'", "CCC-O5'",
+    "CCC-C2",  "CCC-C4",  "CCC-C5",  "CCC-C6",  "CCC-N1",  "CCC-N3",  "CCC-N4",  "CCC-O2",
+    "CCC-O1C", "CCC-O2C", "CCC-PC",
+    "CCC-OP1", "CCC-OP2", "CCC-OP3", "CCC-P",
+    # for base A23
+    "A23-C1'", "A23-C2'", "A23-C3'", "A23-C4'", "A23-C5'", "A23-O2'", "A23-O3'", "A23-O4'", "A23-O5'",
+    "A23-C2",  "A23-C4",  "A23-C5",  "A23-C6",  "A23-C8",  "A23-N1",  "A23-N3",  "A23-N6",  "A23-N7",  "A23-N9",
+    "A23-O1C", "A23-O2C", "A23-PC",
+    "A23-OP1", "A23-OP2", "A23-OP3", "A23-P",
+    # for base 23G
+    "23G-C1'", "23G-C2'", "23G-C3'", "23G-C4'", "23G-C5'", "23G-O2'", "23G-O3'", "23G-O4'", "23G-O5'",
+    "23G-C2",  "23G-C4",  "23G-C5",  "23G-C6",  "23G-C8",  "23G-N1",  "23G-N2",  "23G-N3",  "23G-N7",  "23G-N9",  "23G-O6",
+    "23G-OC1", "23G-OC2", "23G-PC",
+    "23G-OP1", "23G-OP2", "23G-OP3", "23G-P"
+))
+
+nuc_aromatic_set = set((
+    "A-N1", "A-C2", "A-N3", "A-C4", "A-C5", "A-C6", "A-N7", "A-C8", "A-N9",
+    "U-N1", "U-C2", "U-N3", "U-C4", "U-C5", "U-C6",
+    "G-N1", "G-C2", "G-N3", "G-C4", "G-C5", "G-C6", "G-N7", "G-C8", "G-N9",
+    "C-N1", "C-C2", "C-N3", "C-C4", "C-C5", "C-C6",
+    "DA-N1", "DA-C2", "DA-N3", "DA-C4", "DA-C5", "DA-C6", "DA-N7", "DA-C8", "DA-N9",
+    "DT-N1", "DT-C2", "DT-N3", "DT-C4", "DT-C5", "DT-C6",
+    "DG-N1", "DG-C2", "DG-N3", "DG-C4", "DG-C5", "DG-C6", "DG-N7", "DG-C8", "DG-N9",
+    "DC-N1", "DC-C2", "DC-N3", "DC-C4", "DC-C5", "DC-C6",
+    "GTP-N1", "GTP-C2", "GTP-N3", "GTP-C4", "GTP-C5", "GTP-C6", "GTP-N7", "GTP-C8", "GTP-N9",
+    "GDP-N1", "GDP-C2", "GDP-N3", "GDP-C4", "GDP-C5", "GDP-C6", "GDP-N7", "GDP-C8", "GDP-N9",
+    "CCC-N1", "CCC-C2", "CCC-N3", "CCC-C4", "CCC-C5", "CCC-C6",
+    "A23-N1", "A23-C2", "A23-N3", "A23-C4", "A23-C5", "A23-C6", "A23-N7", "A23-C8", "A23-N9",
+    "23G-N1", "23G-C2", "23G-N3", "23G-C4", "23G-C5", "23G-C6", "23G-N7", "23G-C8", "23G-N9"
+))
+# seems forget O3' from RNA bases (probably only have small effects on the score)
+nuc_H_donor_set = set((
+    "A-O2'",   "A-N6",
+    "U-O2'",   "U-N3",
+    "G-O2'",   "G-N1",   "G-N2",
+    "C-O2'",   "C-N4",
+    "DA-O3'",  "DA-N6",
+    "DT-O3'",  "DT-N3",
+    "DG-O3'",  "DG-N1",  "DG-N2",
+    "DC-O3'",  "DC-N4",
+    "GTP-O2'", "GTP-N1", "GTP-N2",
+    "GDP-O2'", "GDP-N1", "GDP-N2",
+    "23G-N1",  "23G-N2",
+    "CCC-N4",
+    "A23-N6"
+))
+
+nuc_H_acceptor_set = set((
+    "A-N1", "A-N3", "A-N7",  "A-O2'", "A-O3'", "A-O4'", "A-O5'", "A-OP1", "A-OP2", "A-O1P", "A-O2P",
+    "U-O2", "U-O4", "U-O2'", "U-OP1", "U-O3'", "U-O4'", "U-O5'", "U-OP2", "U-O1P", "U-O2P",
+    "G-N7", "G-O6", "G-N3",  "G-O2'", "G-O3'", "G-O4'", "G-O5'", "G-OP1", "G-OP2", "G-O1P", "G-O2P",
+    "C-O2", "C-N3", "C-O2'", "C-OP1", "C-O3'", "C-O4'", "C-O5'", "C-OP2", "C-O1P", "C-O2P",
+    "DA-N1", "DA-N3", "DA-N7",  "DA-O2'", "DA-O3'", "DA-O4'", "DA-O5'", "DA-OP1", "DA-OP2", "DA-O1P", "A-O2P",
+    "DT-O2", "DT-O4", "DT-O2'", "DT-OP1", "DT-O3'", "DT-O4'", "DT-O5'", "DT-OP2", "DT-O1P", "DT-O2P",
+    "DG-N7", "DG-O6", "DG-N3",  "DG-O2'", "DG-O3'", "DG-O4'", "DG-O5'", "DG-OP1", "DG-OP2", "DG-O1P", "G-O2P",
+    "DC-O2", "DC-N3", "DC-O2'", "DC-OP1", "DC-O3'", "DC-O4'", "DC-O5'", "DC-OP2", "DC-O1P", "DC-O2P",
+    "GTP-N7", "GTP-O6", "GTP-N3",  "GTP-O2'", "GTP-O3'", "GTP-O4'", "GTP-O5'", "GTP-O1A", "GTP-O2A", "GTP-O1B", "GTP-O2B", "GTP-O1G", "GTP-O2G", "GTP-O3G",
+    "GDP-N7", "GDP-O6", "GDP-N3",  "GDP-O2'", "GDP-O3'", "GDP-O4'", "GDP-O5'", "GDP-O1A", "GDP-O2A", "GDP-O1B", "GDP-O2B", "GDP-O3B",
+    "23G-N7", "23G-O6", "23G-N3",  "23G-O2'", "23G-O3'", "23G-O4'", "23G-O5'", "23G-OC1", "23G-OC2", "23G-OP1", "23G-OP2", "23G-OP3",
+    "CCC-O2", "CCC-N3", "CCC-O2'", "CCC-O3'", "CCC-O4'", "CCC-O5'", "CCC-O1C", "CCC-O2C", "CCC-OP1", "CCC-OP2", "CCC-OP3",
+    "A23-N1", "A23-N3", "A23-N7",  "A23-O2'", "A23-O3'", "A23-O4'", "A23-O5'", "A23-O1C", "A23-O2C", "A23-OP1", "A23-OP2", "A23-OP3"
+))
+
+def get_nuc_aromatic_atom_idx_list(mol_dict):
+    aromatic_atom_idx_list = []
+    for atom_idx, (atom_name, resn, mol2_type) in enumerate(zip(mol_dict['atoms'], mol_dict['resns'], mol_dict['mol2_types'])):
+        atom_identifier = f'{resn}-{atom_name}'
+        if mol2_type[0] == 'H':
+            continue
+        if mol2_type[0] != 'C' and mol2_type[0] != 'N':
+            continue
+        if atom_identifier in nuc_aromatic_set:
+            aromatic_atom_idx_list.append(atom_idx)
+        elif atom_identifier not in known_atom_set:
+            print(f'nuc unkown aromatic atom_idx: {atom_idx} -> {atom_identifier}')
+    return  aromatic_atom_idx_list
+
+def get_nuc_H_donor_idx_list(mol_dict):
+    H_donor_idx_list = []
+    for atom_idx, (atom_name, resn, mol2_type) in enumerate(zip(mol_dict['atoms'], mol_dict['resns'], mol_dict['mol2_types'])):
+        atom_identifier = f'{resn}-{atom_name}'
+        if mol2_type[0] == 'H' or mol2_type[0] == 'C':
+            continue
+        if atom_identifier in nuc_H_donor_set:
+            H_donor_idx_list.append(atom_idx)
+        elif atom_identifier not in known_atom_set:
+            print(f'nuc unkown H_donor atom_idx: {atom_idx} -> {atom_identifier}')
+    return  H_donor_idx_list
+
+def get_nuc_H_acceptor_idx_list(mol_dict):
+    H_acceptor_idx_list = []
+    for atom_idx, (atom_name, resn, mol2_type) in enumerate(zip(mol_dict['atoms'], mol_dict['resns'], mol_dict['mol2_types'])):
+        atom_identifier = f'{resn}-{atom_name}'
+        if mol2_type[0] == 'H' or mol2_type[0] == 'C':
+            continue
+        if atom_identifier in nuc_H_acceptor_set:
+            H_acceptor_idx_list.append(atom_idx)
+        elif atom_identifier not in known_atom_set:
+            print(f'nuc unkown H_acceptor atom_idx: {atom_idx} -> {atom_identifier}')
+    return  H_acceptor_idx_list
+
+#main##################################################################
+
+parser = argparse.ArgumentParser(description='Get info file for both receptor and compound')
+parser.add_argument('-r', '--rec', type=str,  required=True, help='path to the receptor, in mol2 format')
+parser.add_argument('-c', '--cpd', type=str,  required=True, help='path to the compound, in mol2 format')
+parser.add_argument('-o', '--out', type=str,  required=True, help='output path for the info file')
+args = parser.parse_args()
+rec_path, cpd_path, out_path = args.rec, args.cpd, args.out
+
+assert os.path.exists(rec_path), f'receptor file -> {rec_path} does not exist'
+assert os.path.exists(cpd_path), f'compound file -> {cpd_path} does not exist'
+
+out_file = open(out_path, 'w')
+
+if __name__ == '__main__':
+
+    out_file.write(f'#{rec_path}\n')
+    out_file.write(f'#{cpd_path}\n')
+
+    openeye_num_torsions = get_openeye_num_torsions(cpd_path)
+    out_file.write(f'lig_openeye_torsion:  {openeye_num_torsions}\n')
+
+    # aromaticity
+    lig_aromatic_idx_list = get_lig_aromatic_atom_idx_list(cpd_path)
+    print(f'lig aromatic num ---> {len(lig_aromatic_idx_list)}', flush=True)
+
+    # H-donor, H-acceptor
+    lig_H_donor_idx_list = get_lig_H_donor_idx_list(cpd_path)
+    lig_H_acceptor_idx_list = get_lig_H_acceptor_idx_list(cpd_path)
+    print(f'lig H donor num ---> {len(lig_H_donor_idx_list)}', flush=True)
+    print(f'lig H acceptor num ---> {len(lig_H_acceptor_idx_list)}', flush=True)
+
+    out_file.write(f'lig_H_donor_idx:  {" ".join(str(idx) for idx in lig_H_donor_idx_list)}\n')
+    out_file.write(f'lig_H_acceptor_idx:  {" ".join(str(idx) for idx in lig_H_acceptor_idx_list)}\n')
+    out_file.write(f'lig_aromatic_idx:  {" ".join(str(idx) for idx in lig_aromatic_idx_list)}\n')
+
+    # aromaticity
+    nuc_mol_dict = parse_single_mol2(rec_path)
+    # print(f'nuc atom num ---> {len(nuc_mol_dict["atoms"])}', flush=True)
+    nuc_aromatic_idx_list = get_nuc_aromatic_atom_idx_list(nuc_mol_dict)
+    print(f'nuc aromatic num ---> {len(nuc_aromatic_idx_list)}', flush=True)
+
+    # H-donor, H-acceptor
+    nuc_H_donor_idx_list = get_nuc_H_donor_idx_list(nuc_mol_dict)
+    nuc_H_acceptor_idx_list = get_nuc_H_acceptor_idx_list(nuc_mol_dict)
+    print(f'nuc H donor num ---> {len(nuc_H_donor_idx_list)}', flush=True)
+    print(f'nuc H acceptor num ---> {len(nuc_H_acceptor_idx_list)}', flush=True)
+
+    out_file.write(f'nuc_H_donor_idx:  {" ".join(str(idx) for idx in nuc_H_donor_idx_list)}\n')
+    out_file.write(f'nuc_H_acceptor_idx:  {" ".join(str(idx) for idx in nuc_H_acceptor_idx_list)}\n')
+    out_file.write(f'nuc_aromatic_idx:  {" ".join(str(idx) for idx in nuc_aromatic_idx_list)}\n')
+
+out_file.close()
