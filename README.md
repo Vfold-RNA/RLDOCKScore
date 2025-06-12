@@ -1,4 +1,4 @@
-# RLDOCKScore - Refined RLDOCK scoring function for RNA-ligand pose prediction and virtual screening
+# RLDOCKScore - A Scoring Function for RNA-Ligand Docking and Small Molecule Virtual Screening
 
 ## Platform Requirements (Tested)
 The following are tested system settings, other hardware/software could also work but has not been tested.
@@ -92,15 +92,15 @@ where * will be *rdock* and *vina*.
 
 ## Download data
 
-The training set, pose prediction set, HIV-1 TAR/PreQ1 RS ensemble and compound library can be downloaded from the **Releases** or through the following commands:
+The training set, pose prediction set, HIV-1 TAR, and robin set can be downloaded from the **Releases** or through the following commands:
 ```
 mkdir -p ${RLDOCKSCORE_HOME}/data/
 ```
 
 ```
-for name in "checksum.txt" "training-set.tar.gz" "pose-prediciton-set.tar.gz" "HIV-1-TAR.tar.gz" "PreQ1-RS.tar.gz" "rldockscore-predicted-scores.tar.gz"
+for name in "checksum.txt" "training-set.tar.gz" "pose-set.tar.gz" "jupyter.tar.gz" HIV-1-TAR.tar.gz" "robin-set"
 do
-  wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/dataset/${name} -O ${RLDOCKSCORE_HOME}/data/${name}
+  wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/data/${name} -O ${RLDOCKSCORE_HOME}/data/${name}
 done
 ```
 Check the integrity of the files:
