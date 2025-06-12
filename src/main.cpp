@@ -227,11 +227,6 @@ ProfilerStart("/tmp/profile.out");
         return 2;
     }
 
-    if(in_score_mode != "virtual_screen" && in_score_mode != "binding_mode") {
-        std::cout << "-s must be specified, it can be set to either virtual_screen or binding_mode." << std::endl;
-        return 2;
-    }
-
     std::cout << "#################################################" << std::endl;
     std::cout << "##               rldock score v2               ##" << std::endl;
     std::cout << "#################################################" << std::endl;
@@ -268,6 +263,11 @@ ProfilerStart("/tmp/profile.out");
         std::cout << "  ----|poses.mol2 (can be symlink or in different folder)" << std::endl;
         std::cout << "  ----|info.txt (can be symlink or in different folder)" << std::endl;
         std::cout << "  ----|..." << std::endl;
+        return 2;
+    }
+
+    if(in_score_mode != "virtual_screen" && in_score_mode != "binding_mode") {
+        std::cout << "-s must be specified, it can be set to either virtual_screen or binding_mode." << std::endl;
         return 2;
     }
 
