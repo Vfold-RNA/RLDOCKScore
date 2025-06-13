@@ -98,7 +98,7 @@ mkdir -p ${RLDOCKSCORE_HOME}/data/
 ```
 
 ```
-for name in "checksum.txt" "training-set.tar.gz" "pose-set.tar.gz" "jupyter.tar.gz" HIV-1-TAR.tar.gz" "robin-set"
+for name in "checksum.txt" "training-set.tar.gz" "pose-set.tar.gz" "jupyter.tar.gz" "HIV-1-TAR.tar.gz" "robin-set"
 do
   wget https://github.com/Vfold-RNA/RLDOCKScore/releases/download/data/${name} -O ${RLDOCKSCORE_HOME}/data/${name}
 done
